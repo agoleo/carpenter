@@ -38,5 +38,8 @@ called `build.sh`.
 The following elements are defined:
  - environment variable `BUILD_PATH`: the build cache directory
  - environment variable `CURR_PATH`: the directory where the build script is located
+ - environment variable `OUT_PATH`: the build out directory
  - function `get_build_path()`, to retrieve the build cache directory of a dependency/
+   component.
+ - function `get_out_path()`, to retrieve the build out directory of a dependency/
    component.

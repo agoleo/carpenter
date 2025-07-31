@@ -169,22 +169,39 @@ class Builder:
 
     def _get_script(self, cmd):
 
-        inner_case = "".join(f'''
+        inner_case_build = "".join(f'''
             "{cid}")
                 echo {c.build_path};;
         ''' for (cid, c) in self.dependencies.items())
+
+        inner_case_out = "".join(f'''
+            "{cid}")
+                echo {c.out_dir};;
+        ''' for (cid, c) in self.dependencies.items())
+
 
         script = f'''
         set -e
         echo $PATH
         get_build_path() {{
             case $1 in
-                {inner_case}
+                {inner_case_build}
                 *)
                     echo component $1 not valid
                     exit 10
             esac
         }}
+
+        get_out_path() {{
+            case $1 in
+                {inner_case_out}
+                *)
+                    echo component $1 not valid
+                    exit 10
+            esac
+        }}
+
+
         source {cmd}
         '''
 
