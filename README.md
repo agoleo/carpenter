@@ -18,7 +18,7 @@ of a film director I love very much.
 Each component should have two files:
 
 - `carpenter.yaml`: the component's manifest file (see manifest description)
-- `builder.sh`: the script that is executed
+- `build.sh`: the script that is executed
 
 # Manifest description
 
@@ -30,3 +30,13 @@ components:
 exclude_date_check:
   - file_that_changes
 ```
+
+# Build scripts
+
+The build script is a bash script located into root folder of the component and
+called `build.sh`.
+The following elements are defined:
+ - environment variable `BUILD_PATH`: the build cache directory
+ - environment variable `CURR_PATH`: the directory where the build script is located
+ - function `get_build_path()`, to retrieve the build cache directory of a dependency/
+   component.

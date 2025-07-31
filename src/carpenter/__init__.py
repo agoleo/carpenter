@@ -16,15 +16,21 @@ import yaml
 
 class Builder:
 
-    def __init__(self, path, build_path=None):
+    def __init__(self, path, build_path=None, dependencies=None):
 
         self.path = path
+        self.src_build_path = build_path
+
         self.curr_path = pathlib.Path(path).resolve()
+        self.curr_id = pathlib.Path(self.curr_path).name
+
         if build_path:
-            self.build_path = build_path
+            self.build_path = os.path.join(self.src_build_path, self.curr_id)
         else:
             self.build_path = os.path.join(self.curr_path, ".build/")
-        self.out_dir = os.path.join(self.curr_path, "dist/")
+
+        self.build_path = pathlib.Path(self.build_path).resolve()
+        self.out_dir = os.path.join(self.build_path, "out/")
         self.data_file = os.path.join(self.build_path, f"data.json")
         self.build_manifest_file = os.path.join(self.curr_path, f"carpenter.yaml")
 
@@ -39,6 +45,9 @@ class Builder:
         self.load_data()
 
         self.dry_run = False
+
+        self.dependencies = dependencies.copy() if dependencies is not None else {}
+
 
     def check_changed(self,
                       path,
@@ -100,14 +109,19 @@ class Builder:
       
         if self.build_manifest.get('components'):
             for component in self.build_manifest['components']:
-                comp_build = Builder(path=os.path.join(self.curr_path, component))
+                comp_build = Builder(path=os.path.join(self.curr_path, component),
+                                     build_path=self.src_build_path,
+                                     dependencies=self.dependencies)
+
+                self.dependencies[comp_build.curr_id] = comp_build
+
                 try:
                     comp_build.build()
                 except:
                     logging.error(f'failed to build component {component}')
                     raise
-                print(os.path.join(comp_build.curr_path, '.build'))
-                dt_comp = comp_build.check_changed(os.path.join(comp_build.curr_path, '.build'))
+
+                dt_comp = comp_build.check_changed(os.path.join(comp_build.build_path))
                 logging.info(f"build date for component {component}: {dt_comp}")
                 if newer_comp_dt is None or dt_comp > newer_comp_dt:
                     newer_comp_dt = dt_comp
@@ -136,10 +150,15 @@ class Builder:
             else:
                 build_script = 'build.sh'
 
+            env = os.environ.copy()
+            env['BUILD_PATH'] = self.build_path
+            env['SCRIPT_PATH'] = self.curr_path
+            env['OUT_PATH'] = self.out_dir
+
             build_retcode = self._execute(
                 os.path.join(self.curr_path, "build.sh"),
                 raise_on_error=True,
-                env={'BUILD_PATH': self.build_path, 'SCRIPT_PATH': self.curr_path})
+                env=env)
 
         finally:
             self.data['build_retcode'] = build_retcode
@@ -147,6 +166,29 @@ class Builder:
 
         self.save_data()
 
+
+    def _get_script(self, cmd):
+
+        inner_case = "".join(f'''
+            "{cid}")
+                echo {c.build_path};;
+        ''' for (cid, c) in self.dependencies.items())
+
+        script = f'''
+        set -e
+        echo $PATH
+        get_build_path() {{
+            case $1 in
+                {inner_case}
+                *)
+                    echo component $1 not valid
+                    exit 10
+            esac
+        }}
+        source {cmd}
+        '''
+
+        return script
 
     def _execute(self, cmd, chdir=None, raise_on_error=True, env=None):
         logging.info(f"execute {cmd}")
@@ -157,6 +199,8 @@ class Builder:
             os.chdir(chdir)
 
         try:
+
+            cmd = ['bash', '-c', self._get_script(cmd)]
 
             process = subprocess.Popen(
                cmd,
