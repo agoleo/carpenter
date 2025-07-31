@@ -1,5 +1,9 @@
 # Introduction
 
+Please note, this project is a WIP at very early stage and it is not
+suitable for real cases yet since it lacks documentation and it is subjected
+to major changes.
+
 Carpenter allows to build a project with different "components".
 Each component is located in a folder and shall contain the file build.yaml,
 we call it the 'build manifest'.
