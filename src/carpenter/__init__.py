@@ -16,18 +16,21 @@ import yaml
 
 class Builder:
 
-    def __init__(self, path, build_path=None, dependencies=None):
+    def __init__(self, path, build_path=None, variant=None, dependencies=None):
 
         self.path = path
         self.src_build_path = build_path
+
+        self.variant = variant if variant is not None else "default"
 
         self.curr_path = pathlib.Path(path).resolve()
         self.curr_id = pathlib.Path(self.curr_path).name
 
         if build_path:
-            self.build_path = os.path.join(self.src_build_path, self.curr_id)
+            self.build_path = os.path.join(self.src_build_path, 
+                                           self.curr_id + "_" + self.variant)
         else:
-            self.build_path = os.path.join(self.curr_path, ".build/")
+            self.build_path = os.path.join(self.curr_path, f".build_{variant}/")
 
         self.build_path = pathlib.Path(self.build_path).resolve()
         self.out_dir = os.path.join(self.build_path, "out/")
@@ -47,7 +50,6 @@ class Builder:
         self.dry_run = False
 
         self.dependencies = dependencies.copy() if dependencies is not None else {}
-
 
     def check_changed(self,
                       path,
@@ -111,6 +113,7 @@ class Builder:
             for component in self.build_manifest['components']:
                 comp_build = Builder(path=os.path.join(self.curr_path, component),
                                      build_path=self.src_build_path,
+                                     variant=self.variant,
                                      dependencies=self.dependencies)
 
                 self.dependencies[comp_build.curr_id] = comp_build
@@ -121,13 +124,13 @@ class Builder:
                     logging.error(f'failed to build component {component}')
                     raise
 
-                dt_comp = comp_build.check_changed(os.path.join(comp_build.build_path))
+                dt_comp = comp_build.check_changed(os.path.join(comp_build.path))
                 logging.info(f"build date for component {component}: {dt_comp}")
                 if newer_comp_dt is None or dt_comp > newer_comp_dt:
                     newer_comp_dt = dt_comp
 
         build_retcode = self.data.get('build_retcode')
-        new_dt = self.check_changed(self.curr_path, ['.git', '.build', 'dist'])
+        new_dt = self.check_changed(self.curr_path, exclude_globs=['.*'])
 
         logging.info(f'last build retcode={build_retcode}')
 
@@ -154,6 +157,7 @@ class Builder:
             env['BUILD_PATH'] = self.build_path
             env['SCRIPT_PATH'] = self.curr_path
             env['OUT_PATH'] = self.out_dir
+            env['VARIANT'] = self.variant
 
             build_retcode = self._execute(
                 os.path.join(self.curr_path, "build.sh"),
@@ -265,8 +269,11 @@ def main():
         epilog="",
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    parser.add_argument('-o', "--option", dest="options", action='append',
-                        help="option, passed as env variable to build scripts")
+    #~ parser.add_argument('-o', "--option", dest="options", action='append',
+    #~                     help="option, passed as env variable to build scripts")
+
+    parser.add_argument('-v', "--variant", dest="variant",
+                        help="variant, passed as env variable to build scripts")
 
     parser.add_argument("--build-path", dest="build_path", required=False,
                         help="path used as cache for building")
@@ -276,7 +283,9 @@ def main():
 
     args = parser.parse_args()
 
-    builder = Builder(path=args.path, build_path=args.build_path)
+    builder = Builder(path=args.path, 
+                      build_path=args.build_path,
+                      variant=args.variant)
 
     if args.action == 'clear':
 
